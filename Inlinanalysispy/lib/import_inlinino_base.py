@@ -12,14 +12,14 @@ import pandas as pd
 def import_inlinino_flow(f):
 
     df=pd.read_csv(f, header=0, skiprows=1)
-    df.columns=["time", "Switch", "Flow(0)"]
-    df["Flow(0)"]=df["Flow(0)"].astype(float)
-    df["Switch"]=df["Switch"].replace({"True": 1, "False": 0})
+    df.columns=["time", "swt", "flow"]
+    df["flow"]=df["flow"].astype(float)
+    df["swt"]=df["swt"].replace({"True": 1, "False": 0})
     df.index=pd.to_datetime(df.time)
     df=df.drop("time", axis=1)
     df=df.resample('1min').mean() #, origin=df.index[0]).mean()
     df.sort_index(inplace=True)
-
+    df['dt']=df.index
     return(df)                
 
 def import_inlinino_acs(f,saturationthreshold=34, fillsatvalues=False):
@@ -73,6 +73,6 @@ def import_inlinino_acs(f,saturationthreshold=34, fillsatvalues=False):
     flagbool.index=time_acs
     
     df_combined = pd.concat([avals, cvals, flagbool], axis=1)
-
+    df_combined['dt']=df_combined.index
 
     return df_combined

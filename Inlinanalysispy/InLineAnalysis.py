@@ -1,5 +1,9 @@
 import configparser
 import importlib
+import numpy as np
+import os
+import matplotlib.pyplot as plt
+from datetime import datetime, timedelta
 
 # Placeholder class for InLineAnalysis
 class InLineAnalysis:
@@ -45,6 +49,12 @@ class InLineAnalysis:
                 cfg['write'] = config.getboolean('process', 'write')
                 cfg['parallel'] = config.getint('process', 'parallel')
                 cfg['skip_instruments'] = config.get('process', 'skip').split(',')
+                cfg['qc_mode'] = config.get('process', 'qc_mode', fallback='default')
+                cfg['qc_once_for_all'] = config.get('process', 'qc_once_for_all', fallback='default')
+                cfg['qc_remove_old'] = config.get('process', 'qc_remove_old', fallback='default')
+                cfg['qc_remove_when_flow_below'] = config.get('process', 'qc_remove_when_flow_below', fallback='default')
+                cfg['bin_size'] = config.get('process', 'bin_size', fallback='default')
+                
             else:
                 print("Warning: No [process] section found in the configuration file.")
                 
@@ -55,8 +65,13 @@ class InLineAnalysis:
                 print("Warning: No [sync] section found in the configuration file.")
             
             # Load QC mode from the [qc] section
-            if 'qc' in config:
-                cfg['qc_mode'] = config.get('qc', 'mode', fallback='default')
+            if 'qcref' in config:
+                cfg['qcref']={}
+                cfg['qcref']['reference'] = config.get('qcref', 'reference')
+                cfg['qcref']['view'] = config.get('qcref', 'view')
+                cfg['qcref']['MinFiltPeriod'] = config.get('qcref', 'MinFiltPeriod')
+                cfg['qcref']['szFilt'] = config.get('qcref', 'szFilt')
+
             else:
                 print("Warning: No [qc] section found in the configuration file.")
                 
@@ -99,6 +114,7 @@ class InLineAnalysis:
                         'path_prod': config.get(section, 'path_prod', fallback=None),
                         'path_ui': config.get(section, 'path_ui', fallback=None),
                         'view_varname': config.get(section, 'view_varname', fallback=None),
+                        'view_varcol': config.get(section, 'view_varcol', fallback=None),
                         'temperature_variable': config.get(section, 'temperature_variable', fallback=None),
                         'device_file': config.get(section, 'device_file', fallback=None),
                         'prefix': config.get(section, 'prefix', fallback=None),
@@ -203,83 +219,104 @@ class InLineAnalysis:
         
         print('---------------------------------------------------------------------------------------------+')
     
-
     def QCRef(self):
-        import os
-import numpy as np
-import matplotlib.pyplot as plt
-from datetime import datetime, timedelta
-
-class QCRef:
-    def __init__(self, obj):
-        self.obj = obj
-
-    def run(self):
-        if not hasattr(self.obj.instrument[self.obj.cfg.qcref.view].data, 'dt') or len(self.obj.instrument[self.obj.cfg.qcref.view].data.dt) == 0:
-            raise ValueError(f"{self.obj.cfg.qcref.view} data table is empty. Make sure to view the instrument you are trying to process or load your data before running QCRef.")
-
-        mode = self.obj.cfg.qcref.mode
+    
+        if not hasattr(self.instruments[self.cfg['qcref']['view']].data, 'dt') or len(self.instruments[self.cfg['qcref']['view']].data) == 0:
+            raise ValueError(f"{self.cfg['qcref']['view']} data table is empty. Make sure to view the instrument you are trying to process or load your data before running QCRef.")
+    
+        mode = self.cfg['qcref']['mode']
         if mode == 'ui':
             # Round datetime to the nearest second
-            flow_data = self.obj.instrument['FLOW'].data
-            flow_data['dt'] = np.floor(flow_data['dt']).astype('datetime64[s]')
-
+            flow_data = self.instruments['FLOW'].data
+            flow_data['dt'] = flow_data.index.astype('datetime64[s]')
+    
             # Remove duplicate entries
             _, unique_indices = np.unique(flow_data['dt'], return_index=True)
             duplicate_indices = np.setdiff1d(np.arange(len(flow_data['dt'])), unique_indices)
             flow_data = np.delete(flow_data, duplicate_indices, axis=0)
-
+    
             # Remove invalid entries
-            valid_indices = np.isfinite(flow_data['dt'])
-            flow_data = flow_data[valid_indices]
-
+            # valid_indices = np.isfinite(flow_data['dt'])
+            # flow_data = flow_data[valid_indices]
+    
             # GUI-based selection for QC
+            
+            inst_ref=self.instruments[self.cfg['qcref']['reference']]
+            inst_view=self.instruments[self.cfg['qcref']['view']]
+            
             fig, ax1 = plt.subplots()
             ax1.set_title('Switch position QC:\nSelect total (t; red) and filtered (f; green) sections.\nPress q to save and quit (close graph to cancel and quit)', fontsize=18)
             ax1.set_ylabel('Switch position', color='k')
-            ax1.plot(
-                self.obj.instrument[self.obj.cfg.qcref.reference].data.dt,
-                self.obj.instrument[self.obj.cfg.qcref.reference].data[self.obj.instrument[self.obj.cfg.qcref.reference].view.varname],
-                'k-', linewidth=2
-            )
+            ax1.plot(inst_ref.data.dt,inst_ref.data[inst_ref.cfg['view_varname']],
+                'k-', linewidth=2)
             ax2 = ax1.twinx()
             ax2.scatter(
-                self.obj.instrument[self.obj.cfg.qcref.view].data.dt,
-                self.obj.instrument[self.obj.cfg.qcref.view].data[self.obj.instrument[self.obj.cfg.qcref.view].view.varname][:, self.obj.instrument[self.obj.cfg.qcref.view].view.varcol],
-                label=self.obj.instrument[self.obj.cfg.qcref.view].view.varname
+                inst_view.data.dt,
+                inst_view.data.iloc[:, int(inst_view.cfg['view_varcol'])],
+                label=inst_view.cfg['view_varname']
             )
-
+    
             plt.legend(fontsize=14)
             plt.show()
-
+    
             # Save selections to a file
-            user_selection = {'total': [], 'filtered': []}  # Placeholder for selections from GUI
-            save_path = os.path.join(self.obj.instrument[self.obj.cfg.qcref.reference].path.ui, 'QCRef_UserSelection.npy')
+            user_selection = {'total': inst_ref.data[inst_ref.data.swt==0], 
+                              'filtered': inst_ref.data[inst_ref.data.swt==1]}  # Placeholder for selections from GUI
+            save_path = os.path.join(inst_ref.cfg['path_ui'], 'QCRef_UserSelection.npy')
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             np.save(save_path, user_selection)
-
+            
         elif mode == 'load':
-            print(f"QCRef LOAD: {self.obj.cfg.qcref.reference}")
-            load_path = os.path.join(self.obj.instrument[self.obj.cfg.qcref.reference].path.ui, 'QCRef_UserSelection.npy')
+            print(f"QCRef LOAD: {self.obj.cfg['qcref']['reference']}")
+            load_path = os.path.join(self.instruments[self.cfg['qcref']['reference']].path.ui, 'QCRef_UserSelection.npy')
             if os.path.exists(load_path):
                 file_selection = np.load(load_path, allow_pickle=True).item()
-                days2run = self.obj.cfg.days2run
-
+                days2run = self.obj.cfg['days2run']
+    
                 # Filter selections based on days2run
                 if 'total' in file_selection and len(file_selection['total']) > 0:
                     file_selection['total'] = [entry for entry in file_selection['total'] if not (entry[1] < min(days2run) or entry[0] > max(days2run))]
                 if 'filtered' in file_selection and len(file_selection['filtered']) > 0:
                     file_selection['filtered'] = [entry for entry in file_selection['filtered'] if not (entry[1] < min(days2run) or entry[0] > max(days2run))]
-
-                self.obj.instrument[self.obj.cfg.qcref.reference].apply_user_input(file_selection['total'], 'total')
-                self.obj.instrument[self.obj.cfg.qcref.reference].apply_user_input(file_selection['filtered'], 'filtered')
-
+    
+                self.instruments[self.cfg['qcref']['reference']].apply_user_input(file_selection['total'], 'total')
+                self.instruments[self.cfg['qcref']['reference']].apply_user_input(file_selection['filtered'], 'filtered')
+    
         elif mode == 'skip':
             print("WARNING: Reference is not QC.")
         else:
             raise ValueError("Unknown mode.")
 
         
+
+    def Split(self):
+        """
+        Note: Run all days loaded (independent of days2run)
+        """
+        for i in self.cfg['instruments2run']:
+            # i in MATLAB is a cell array, access the first element in Python
+            instrument_name = i
+            
+            # Check if data is empty
+            if not self.instrument[instrument_name].get('data'):
+                raise ValueError(f"{instrument_name} data table is empty")
+            
+            # Check if the instrument is in the skip list
+            if instrument_name in self.cfg['split']['skip']:
+                print(f"SPLIT: Skip {instrument_name} (copy data to next level)")
+                self.instrument[instrument_name]['raw']['tsw'] = self.instrument[instrument_name]['data']
+            
+            # Check if the split mode is 'None'
+            elif self.instrument[instrument_name]['split']['mode'] == 'None':
+                print(f"SPLIT: Not available for {instrument_name}")
+            
+            # Perform the split operation
+            else:
+                print(f"SPLIT: {instrument_name}")
+                reference_instrument = self.instrument[self.cfg['split']['reference']]
+                buffer_value = self.cfg['split']['buffer'][instrument_name]
+                self.instrument[instrument_name].Split(reference_instrument, buffer_value)
+
 
 
     

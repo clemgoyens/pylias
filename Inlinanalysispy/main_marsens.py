@@ -11,7 +11,7 @@ from InLineAnalysis import InLineAnalysis
 ila = InLineAnalysis('/home/clemence/02_JupyterNotebook/00_Flowthrough/Processing/Inlinanalysispy/Inlinanalysispy/cfg/Marsens_cfg.ini')
 
 # Quick config update
-ila.cfg['days2run'] = [datetime(2024, 11, 4) + timedelta(days=i) for i in range(0,2)]
+ila.cfg['days2run'] = [datetime(2024, 11, 4),datetime(2024, 11, 4)]#[datetime(2024, 11, 4) + timedelta(days=i) for i in range(0,2)]
 ila.cfg['instruments2run'] = ['FLOW', 'ACS']
 ila.cfg['parallel'] = float('inf')
 ila.cfg['calibrate']['ACS3'] = {"compute_dissolved": False}
@@ -27,8 +27,8 @@ ila.CheckDataStatus()
 print("Synchronizing instruments...")
 
 # 3. QC Reference
-ila.cfg['qc_mode'] = 'load'
-ila.cfg['qc_remove_old'] = False
+ila.cfg['qcref']['mode'] = 'ui'
+ila.cfg['qcref']['remove_old'] = True
 ila.QCRef()
 
 # 4. Split fsw and tsw
