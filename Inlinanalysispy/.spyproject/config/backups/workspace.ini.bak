@@ -1,0 +1,12 @@
+[workspace]
+restore_data_on_startup = True
+save_data_on_exit = True
+save_history = True
+save_non_project_files = False
+project_type = 'empty-project-type'
+recent_files = ['../../../../../.config/spyder-py3/temp.py', 'InLineAnalysis.py', 'main_marsens.py', 'cfg/Marsens_cfg.ini', 'instruments/__init__.py', 'instruments/FLOW.py', 'instruments/ACS.py', 'lib/data_read.py', 'lib/i_read.py', 'lib/import_inlinino_base.py', 'test_main.py', '../../../../../Soft/acolite/acolite/acolite/cdse/query.py', '../../../../../Soft/acolite/acolite/acolite/ac/ancillary/get.py', '../../../../../Soft/acolite/acolite/acolite/ac/ancillary/interp_met.py', '../../../../../Soft/acolite/acolite/acolite/ac/ancillary/download.py', '../../../../../Soft/acolite/acolite/acolite/ac/ancillary/list_files.py']
+
+[main]
+version = 0.2.0
+recent_files = []
+
