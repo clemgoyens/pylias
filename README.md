@@ -1,2 +1,2 @@
-# pylias
-Python Library for InlineAnalysis
+# PyLIAS
+Python Library for InlineAnalysiS
